@@ -1,0 +1,15 @@
+torch>=2.6,<2.8
+torchvision>=0.21,<0.23
+diffusers==0.35.2
+transformers>=4.44,<5
+accelerate>=1.0
+safetensors>=0.4
+spacy==3.8.7
+spacy-curated-transformers==0.3.1
+numpy>=1.26,<2
+scipy>=1.15,<2
+matplotlib>=3.9,<4
+opencv-python-headless>=4.10,<5
+Pillow>=10,<12
+tqdm>=4.66
+IPython>=8.20
