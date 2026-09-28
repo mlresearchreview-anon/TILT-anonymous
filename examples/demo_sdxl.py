@@ -693,8 +693,7 @@ def main():
             # rand_noise = rand_noise / (rand_noise.norm() + 1e-4) * noise_multi.norm()
             rand_noise = rand_noise / (rand_noise.abs().max() + 1e-3) * forward_noise.abs().max()
             psi_t = torch.ones_like(at) * psi
-            #! Changing the intermediate noise to match with the denoised noise. 
-            fwd_noise = psi_t * rand_noise.detach() + (1 - psi_t) * forward_noise.detach() #! some bug, why?  #TODO: simple convex? 
+            fwd_noise = psi_t * rand_noise.detach() + (1 - psi_t) * forward_noise.detach() 
             fwd_noise = fwd_noise / (fwd_noise.abs().max() + 1e-3) * forward_noise.abs().max() # Needs length normalization. Sensitive to legth. 
             return at.sqrt() * x_tilde_0 + (1 - at).sqrt() * fwd_noise
 
@@ -732,13 +731,13 @@ def main():
             x_interm = at_prev.sqrt() * x0_interm + (1 - at_prev).sqrt() * out_noise
             # return x_interm + float(eta) * net_grad
             netgrad_factor = at_prev.sqrt() / at.sqrt()  # This is the scaling factor to match the length of net_grad with x_interm
-            x_prev = x_interm + netgrad_factor * net_grad #! net_grad's length should be  some fraction of (at_prev.sqrt() * x0_interm)
-            return x_prev / (x_prev.abs().max() + 1e-3) * x_interm.abs().max()  #! length normalization to match the scale of x_interm
+            x_prev = x_interm + netgrad_factor * net_grad 
+            return x_prev / (x_prev.abs().max() + 1e-3) * x_interm.abs().max()  
 
         elif update_step_type == "joint_step":
             # net_grad folded into the noise prediction BEFORE the step.
             updated_noise = interm_noise - float(eta) * net_grad  # -ve sign to match the noise_pred update direction
-            updated_noise = updated_noise / (updated_noise.abs().max() + 1e-3) * interm_noise.abs().max()  #! length normalization to match the scale of interm_noise
+            updated_noise = updated_noise / (updated_noise.abs().max() + 1e-3) * interm_noise.abs().max()  
             updated_tweedie = (x_t - (1 - at).sqrt() * updated_noise) / at.sqrt()
             out_noise = noise_uncond.detach() if use_cfgpp else updated_noise
             return at_prev.sqrt() * updated_tweedie + (1 - at_prev).sqrt() * out_noise
@@ -824,7 +823,7 @@ def main():
                             )
                             score_concept_x0 = _noise2score(noise_concept_x0, at_eps)
                             score_concepts_sum += score_concept_x0
-                        #! This is coming out to be very small in magnitude
+                   
                         composed_score_x0 = score_multi_x0 - (1 / K) * score_concepts_sum
                         # composed_score_x0 = config.beta * score_multi - config.beta * score_concepts_sum
                     else:
@@ -975,30 +974,11 @@ def main():
     ):
         """Diffusion-classifier scalar reward, energy form of the PMI reward.
 
-            R(x0) = Σ_i w_i E_{c_i}(x0) - E_C(x0),     w on the simplex
-
-        with per-condition energy
-            E_c(x0) = E_{τ,ε}[ w(τ) · || ε - ε_θ(x_τ, τ, c) ||² ],
-            x_τ = √ᾱ_τ · x0 + √(1-ᾱ_τ) · ε.
-
-        Since E_c ≈ -log p(x0|c) + const, R ≈ Σ_i w_i log[ p(x0|C) / p(x0|c_i) ], a convex
-        combination of per-concept PMIs. The SAME (τ, ε) draws are shared across C and
-        every c_i (common random numbers), so the difference is low-variance.
-        UNet runs fp16; ε / ε_pred / the squared-sum are fp32 (no overflow).
-
         """
         K = emb_concepts.shape[0]
         device = x0.device
         opt2 = x0_concepts is not None
         if opt2:
-            # d_i compares two CONDITIONS, so it needs a common x_τ; with per-anchor rows
-            # eps_pred[0:1] - eps_pred[1:] mixes a condition change with a base-point change
-            # (scratch3.tex §2.5, Remarks). Refuse rather than report a meaningless weight.
-            # if use_adaptive_weights:
-            #     raise NotImplementedError(
-            #         "Adaptive concept weights need a common x_tau; unsupported with "
-            #         "per-concept Tweedie anchors (scratch3.tex §2.5, Remarks)."
-            #     )
             if x0_concepts.shape[0] != K:
                 raise ValueError(
                     f"x0_concepts has {x0_concepts.shape[0]} anchors but there are {K} concepts."
@@ -1023,19 +1003,13 @@ def main():
         tau_hi = int(max(config.energy_tau_min, config.energy_tau_max))
         n_samples = max(1, num_samples_override if num_samples_override is not None else config.energy_num_samples)
 
-        # Deterministic (tau, eps) draws when rng_seed is given (used by the curl
-        # diagnostic so its finite-difference field is consistent across evals).
-        #! bug: fixing the rng seed to time will lead to same noise for all samples, which is not desired.
-        #! also it will leak to the global rng state, which is not desired.
+
         if rng_seed is not None: 
             torch.manual_seed(int(rng_seed))
             if x0.is_cuda:
                 torch.cuda.manual_seed_all(int(rng_seed))
 
-        # Accumulate the per-condition energy VECTORS (and the score-difference norms) and
-        # reduce once after the loop: d_i in Eq. (7) is an expectation over (τ, ε), so the
-        # weights must be formed from the τ-averaged d. For the uniform path this is
-        # algebraically identical to accumulating the scalar reward per sample.
+        # Accumulate the per-condition energy VECTORS (and the score-difference norms) 
         E_acc = None
         d_acc = None
         for k in range(n_samples):
@@ -1067,9 +1041,7 @@ def main():
 
             sq = (eps - eps_pred) ** 2                # [K+1, C, H, W] (broadcast over batch)
             E = w * sq.flatten(1).sum(dim=1)          # [K+1]
-            # d_i = ω(τ)·‖ε_θ(x_τ,τ,C) - ε_θ(x_τ,τ,c_i)‖²  (Eq. 7) — free, same ε_pred rows.
-            # Under Option 2 the rows sit at different anchors, so this is NOT a pure condition
-            # discrepancy; it is kept as a logging-only quantity (adaptive weights are refused).
+
             d = w * ((eps_pred[0:1] - eps_pred[1:]) ** 2).flatten(1).sum(dim=1)  # [K]
 
             E_acc = E if E_acc is None else E_acc + E
@@ -1118,16 +1090,6 @@ def main():
         x0, tau_t, at_tau, eps, emb_stack, pool_stack, use_cfg, x0_concepts=None,
     ):
         """Per-condition energies for ONE particle (a single (tau, eps) draw).
-
-        Same math as one iteration of calculate_reward_energy's sample loop, with
-        [C, c_1..c_K] (and the CFG uncond row) kept batched in a single UNet call.
-        Returns (E, d): E is [K+1] = [E_C, E_c1..E_cK], d is [K] (the score-difference
-        norms feeding the adaptive weights).
-
-        With x0_concepts (Option 2) each condition is noised from its OWN Tweedie anchor
-        — rows are [C @ x̂₀^C, c_i @ x̂₀^{c_i}], sharing this particle's (tau, eps) — and
-        under CFG every anchor carries its own uncond row, 2(K+1) rows in total. Mirrors
-        the opt2 branch of calculate_reward_energy.
         """
         opt2 = x0_concepts is not None
         if opt2:
@@ -1165,30 +1127,6 @@ def main():
         return_components=False, x0_concepts=None,
     ):
         """Per-particle gradient-accumulating form of calculate_reward_energy.
-
-        Same reward, but each particle (one (tau, eps) draw) is backprop'd and freed
-        before the next is drawn, instead of holding every particle's graph alive and
-        backpropping once in the caller. [C, c_1..c_K] stay batched within a particle,
-        so only the particle axis is traded for memory: the peak footprint is one
-        particle's forward graph rather than n_samples of them.
-
-            R = (1/n) Σ_particles Σ_i w_i (E_{c_i} - E_C)
-
-        is linear in the per-particle terms, so accumulating ∇_{x0} per particle is
-        exact — identical to one backward over the summed reward.
-
-        CAVEAT: with use_adaptive_weights the softmin weights are formed from each
-        particle's OWN d, which is what removes the need for a second pass over the
-        particles. calculate_reward_energy instead applies one softmin to the
-        particle-averaged d; softmin is nonlinear, so the two are not identical.
-
-        OPTION 2 (x0_concepts given, scratch3.tex §2.5): each condition is read at its own
-        Tweedie anchor, so the reward depends on K+1 separate variables and every particle
-        backprops to ALL of them at once — grad_x0 is then the pair (grad_C, grad_concepts)
-        with grad_C = ∂R/∂x̂₀^C (= -g_C) and grad_concepts = ∂R/∂x̂₀^{c_i} (= g_{c_i}/K),
-        exactly what one grad(R, [x0, x0_concepts]) over the summed reward would give. The
-        caller still owns the transport back to x_t (the Variant A VJP): only the reward
-        subgraph is freed here, the anchors' base subgraph is untouched.
 
         Returns (grad_x0, R[, components]) — the backward already happened inside;
         grad_x0 is a tensor under Option 1, the tuple (grad_C, grad_concepts) under Option 2.
@@ -1303,16 +1241,6 @@ def main():
         x0, embC, poolC, emb_concepts, pool_concepts, emb_uncond, pool_uncond, t, cstep,
     ):
         """Estimate the antisymmetry of the guidance field's Jacobian.
-
-        The field is g = ∇_{x0} R. If R is a true scalar, its Jacobian J = ∂g/∂x is
-        symmetric (it is the Hessian of R) → antisymmetry ≈ 0 (conservative). Measured
-        exactly via double-backward Hessian-vector products on random direction pairs:
-        a = vᵀ(J - Jᵀ)u. Exact HVPs (not finite differences) avoid the catastrophic
-        cancellation that would otherwise bury the signal in fp16 noise. A single
-        energy sample is used (num_samples_override=1) to keep the 2nd-order graph in
-        memory; non-reentrant checkpointing (already active in the caller) enables the
-        double-backward. TF32 is disabled so reduced-mantissa matmuls do not inject
-        fake asymmetry; the global RNG state is saved/restored.
         """
         prev_matmul_tf32 = torch.backends.cuda.matmul.allow_tf32
         prev_cudnn_tf32 = torch.backends.cudnn.allow_tf32
@@ -1320,11 +1248,6 @@ def main():
         torch.backends.cudnn.allow_tf32 = False
         cpu_rng_state = torch.get_rng_state()
         cuda_rng_state = torch.cuda.get_rng_state_all() if x0.is_cuda else None
-        # NOTE: the UNet runs fp16 here, so the double-backward has a ~1e-4 noise floor.
-        # Where the reward is locally near-flat, the true curvature (sym_rms) can also be
-        # at that floor, making the ratio inconclusive. A decisive antisym≈0 reading needs
-        # an fp32 UNet, which does not fit at 1024 — evaluate at lower resolution, or
-        # compare against the score-difference baseline (run --algo_version option1).
         try:
             with torch.enable_grad():
                 x = x0.detach().clone().requires_grad_(True)
@@ -1372,11 +1295,6 @@ def main():
         correction_mode = correction_mode or config.correction_mode
         """Scalar-energy reward guidance (see scratch2.tex).
 
-        Replaces the score-difference composed gradient of update_x_with_dps with
-        grad_x0 = ∇_{x̂₀} R, where R is the scalar diffusion-classifier reward from
-        calculate_reward_energy. The gradient of a scalar is conservative by
-        construction (no curl), then transported to x_t-space by the single shared
-        Tweedie Jacobian. Downstream update/debug/return logic mirrors update_x_with_dps.
         """
         text_embed_uncond = text_embeds[0:1]
         text_embed_multi = text_embeds[1:2]
@@ -1441,11 +1359,7 @@ def main():
                 # ── scalar-energy reward → gradient by autodiff ───────────────────
                 correction_seed = viz_state["seed"] + t
                 netgrad_rng_seed = int(correction_seed.item()) if config.netgrad_crn else None 
-                # With --energy_adaptive_weights the uniform 1/K is replaced by the
-                # softmin weights of scratch4.tex Eq. (9); off by default → Eq. (6).
-                # NOTE: the field is conservative only in the uniform case — the adaptive
-                # weights are detached, so the Σ_i r_i ∇w_i term is dropped (see the
-                # CAVEAT in calculate_reward_energy).
+
                 grad_x0, R, reward_comps = calculate_reward_energy_grad(
                     x0_hat,
                     text_embed_multi, text_embed_multi_pool,
@@ -1455,8 +1369,7 @@ def main():
                     use_adaptive_weights=config.energy_adaptive_weights,
                     return_components=True,
                 )
-                # ∇_{x̂₀} R — field in x̂₀-space (drop-in for composed_score_x0), accumulated
-                # per-particle inside calculate_reward_energy_grad (see docstring there).
+
                 composed_score_x0 = grad_x0   # alias for debug-save blocks
                 score_concept_x0 = grad_x0    # alias for correct-tweedie save block
 
@@ -1630,29 +1543,7 @@ def main():
         correction_mode = correction_mode or config.correction_mode
         """Option 2 of the scalar-energy reward: concept-wise Tweedie anchors (scratch3.tex §2.5).
 
-        update_x_with_energy_grad reads all K+1 energies at ONE point, the full-prompt Tweedie
-        mean. Here each energy is read at its own anchor (Eq. 16),
-
-            x̂₀^c = 𝒯_t(x_t, ε^cfg_c(x_t, t)),      c ∈ {C, c_1, ..., c_K},
-
-        because the tightest posterior mean for the c-term is the one taken UNDER c. That gives
-
-            R⁽²⁾ = (1/K) Σ_i E_{c_i}(x̂₀^{c_i}) - E_C(x̂₀^C)          (Eq. 17)
-
-        with g_c = ∇_u E_c(u)|_{u = x̂₀^c}. BOTH correction modes now use Variant A (Eq. 20),
-
-            ∇_{x_t}R⁽²⁾ = (1/K) Σ_i J(x̂₀^{c_i})^T g_{c_i} - J(x̂₀^C)^T g_C
-
-        i.e. the Jacobians are always kept. The Jacobian-free Variant B (Eq. 21) is NOT reachable
-        any more: its G⁽²⁾ sums gradients w.r.t. K+1 different variables, so it is the gradient of
-        no scalar. The modes now differ only in where that one gradient is applied:
         """
-        # Fail fast, before any sampling: d_i needs a common x_τ (see calculate_reward_energy).
-        # if config.energy_adaptive_weights:
-        #     raise NotImplementedError(
-        #         "--energy_adaptive_weights is unsupported with algo_version=energy-opt2: the "
-        #         "discrepancies d_i need a common x_tau (scratch3.tex §2.5, Remarks)."
-        #     )
         if config.x0_hat_score_source not in ("multi-cfg", "multi"):
             print(
                 "[WARN] energy-opt2 with --x0_hat_score_source="
@@ -1740,12 +1631,7 @@ def main():
                 # ── scalar-energy reward at matched anchors → gradient by autodiff ─
                 correction_seed = viz_state["seed"] + t
                 netgrad_rng_seed = int(correction_seed.item()) if config.netgrad_crn else None 
-                # Partials at each anchor: ∂R/∂x̂₀^C = -g_C, ∂R/∂x̂₀^{c_i} = g_{c_i}/K —
-                # accumulated ONE PARTICLE AT A TIME inside calculate_reward_energy_grad, so
-                # only a single particle's forward graph is ever resident instead of all
-                # n_samples of them (see the docstring there). Reward and gradient are
-                # unchanged in the uniform-weight case; with --energy_adaptive_weights the
-                # weights come from each particle's own d (the CAVEAT there).
+
                 (grad_C, grad_concepts), R, reward_comps = calculate_reward_energy_grad(
                     x0_hat_C,
                     text_embed_multi, text_embed_multi_pool,
@@ -1762,10 +1648,6 @@ def main():
                 composed_score_x0 = grad_x0
                 score_concept_x0 = grad_concepts.sum(dim=0, keepdim=True)
 
-                # Variant A (Eq. 20), used by BOTH modes: one VJP of the K+1 partials back to x_t
-                # gives ∇_{x_t}R^(2) = (1/K)Σ_i J(x̂₀^{c_i})^T g_{c_i} - J(x̂₀^C)^T g_C directly.
-                # Touches the base subgraph only — the reward subgraph was freed by the grad()
-                # above — so it is cheaper than grad(R, x_cur), which would redo the reward passes.
                 grad = torch.autograd.grad(
                     outputs=[x0_hat_C, x0_hat_concepts],
                     inputs=x_cur,
@@ -1783,7 +1665,7 @@ def main():
                     # x0_hat_interm = _compute_x0_hat_interm(x_interm.detach(), at, noise_uncond, noise_multi, noise_multi_cfg)
                     noise_interm = _get_interm_noise(cstep, num_latent_corrector_steps, noise_uncond, noise_multi, noise_multi_cfg)
                     x0_hat_interm = _compute_x0_from_xt(x_cur.detach(), at, noise_interm)
-                    # x_tilde_0 = (1 - eta / num_latent_corrector_steps) * x0_hat_interm + (eta / num_latent_corrector_steps) * grad.detach() #!! eta is very low at high t; so this is mostly grad
+                    # x_tilde_0 = (1 - eta / num_latent_corrector_steps) * x0_hat_interm + (eta / num_latent_corrector_steps) * grad.detach()
                     x_tilde_0 = x0_hat_interm + eta / (num_latent_corrector_steps) * grad.detach() # divide by at_prev because it was pre-multiplied inside denoise_step() for x_t correction. 
 
                     # Erases any constant prefactor on grad, so beta is inert here (eta is the
@@ -1835,7 +1717,6 @@ def main():
                             decode_tensor = 4.0 * _tensor / (_tensor.abs().max() + 1e-8)
                             decode_latent_for_viz(decode_tensor, out_path)
                 elif correction_mode == "correct-tweedie":
-                    #! This branch's update is not mathematically consistent -- we add grad w.r.t x_t to x0_hat. 
                     # Apply the SAME Eq. 20 gradient, but in x̂₀-space: add it to x̂₀^C, then
                     # re-noise. `grad` is x_t-space; the normalize below absorbs the 1/√ᾱ_t gap.
                     cgmin, cgmax = grad.min().item(), grad.max().item()
@@ -1921,630 +1802,9 @@ def main():
 
         return x_cur.to(dtype=x.dtype).detach(), stats
 
-    def update_x_with_energy_eucl_netgrad(x, t, num_latent_corrector_steps, eta, beta, correction_mode=None):
-        """`correction_mode` overrides config.correction_mode (per-phase hybrid modes)."""
-        correction_mode = correction_mode or config.correction_mode
-        """Euclidean net-gradient ascent in x̂₀-space (see scratch3.tex §2).
+    
 
-        Unlike update_x_with_energy_grad/correct-tweedie — which re-noises back to t and
-        re-runs the base UNet pass at every inner step — the base pass here runs ONCE and
-        the whole corrector loop stays in x̂₀-space:
 
-            x_t → x̂₀⁽¹⁾ --∇R--> x̃₀⁽²⁾ --∇R--> ... → x̃₀⁽ᴹ⁾
-
-        with, for k = 1..M (M = num_latent_corrector_steps gradient evaluations),
-            ĝ⁽ᵏ⁾ = β·∇_{u⁽ᵏ⁾}R / (‖·‖+δ) · ‖x̂₀⁽¹⁾‖      (norm-match to the ANCHOR)
-            u⁽ᵏ⁺¹⁾ = u⁽ᵏ⁾ + (γ/M)·ĝ⁽ᵏ⁾
-        The accumulated displacement is the net gradient, and one outer step is taken along it:
-            Δ = u⁽ᴹ⁺¹⁾ - x̂₀⁽¹⁾ ,   x̃₀ = x̂₀⁽¹⁾ + η·Δ
-        Finally one DDIM step reuses the ORIGINAL ε that produced x̂₀⁽¹⁾, so (ε, x̂₀) never
-        become mismatched: x_{t-1} = √ᾱ_{t-1}·x̃₀ + √(1-ᾱ_{t-1})·ε.
-
-        Consequences vs. correct-tweedie: no re-noising (successive gradients live on one
-        landscape → R should rise monotonically across inner steps), ‖Δ‖ ≤ γ‖x̂₀⁽¹⁾‖ regardless
-        of M, and one base UNet pass per timestep instead of M.
-
-        Knobs: γ = config.netgrad_gamma is the inner step size; η scales the ACCUMULATED
-        displacement (η=1 → plain accumulated ascent, x̃₀ = x̃₀⁽ᴹ⁾). The anchor ε is selected
-        by --x0_interm_noise_type; --x0_hat_score_source is unused on this path (a single
-        anchor serves both as the gradient base point and as the corrected Tweedie mean).
-        """
-        if num_latent_corrector_steps < 1:
-            raise ValueError("energy-netgrad needs num_latent_corrector_steps >= 1 (M gradient evaluations).")
-
-        text_embed_uncond = text_embeds[0:1]
-        text_embed_multi = text_embeds[1:2]
-        text_embed_uncond_pool = text_embeds_pool[0:1]
-        text_embed_multi_pool = text_embeds_pool[1:2]
-
-        base_slice = prompt_layout["base_concept_slice"]
-        attr_slice = prompt_layout["attribute_slice"]
-        concept_chunks = [text_embeds[base_slice]]
-        concept_pool_chunks = [text_embeds_pool[base_slice]]
-        if config.use_attribute_guidance and prompt_layout["concept_items"]:
-            concept_chunks.append(text_embeds[attr_slice])
-            concept_pool_chunks.append(text_embeds_pool[attr_slice])
-        text_embed_concepts = torch.cat([chunk for chunk in concept_chunks if chunk.shape[0] > 0], dim=0)
-        text_embed_concepts_pool = torch.cat(
-            [chunk for chunk in concept_pool_chunks if chunk.shape[0] > 0],
-            dim=0,
-        )
-
-        if text_embed_concepts.shape[0] == 0:
-            text_embed_concepts = text_embed_multi
-            text_embed_concepts_pool = text_embed_multi_pool
-
-        at, at_prev = _get_alphas(t)
-
-        x_cur = x.detach().to(dtype=torch.float32)
-        stats = {}
-        unet.requires_grad_(False)
-        # Gradient checkpointing (non-reentrant) keeps the backprop through the reward's
-        # UNet passes within memory, and enables the 2nd-order curl diag.
-        ckpt_was_enabled = unet.is_gradient_checkpointing
-        if not ckpt_was_enabled:
-            unet.enable_gradient_checkpointing()
-
-        with force_nonreentrant_checkpoint(), torch.autocast(device_type="cuda", enabled=False), torch.enable_grad():
-            # ── base pass: ONCE, and without grad (no Jacobian is transported here) ──
-            with torch.no_grad():
-                noise_pred_base = _predict_noise(
-                    torch.cat([x_cur, x_cur]),
-                    t,
-                    torch.cat([text_embed_uncond, text_embed_multi], dim=0),
-                    torch.cat([text_embed_uncond_pool, text_embed_multi_pool], dim=0),
-                )
-            noise_uncond = noise_pred_base[0:1]
-            noise_multi = noise_pred_base[1:2]
-            noise_multi_cfg = noise_uncond + config.guidance_scale * (noise_multi - noise_uncond)
-
-            # ── frozen anchor x̂₀⁽¹⁾ and the ε that produced it (reused by the DDIM step) ──
-            if config.x0_interm_noise_type == "multi-cfg":
-                eps_anchor = noise_multi_cfg.detach()
-            elif config.x0_interm_noise_type == "multi":
-                eps_anchor = noise_multi.detach()
-            else:
-                eps_anchor = noise_uncond.detach()
-            x0_hat_anchor = _compute_x0_from_xt(x_cur, at, eps_anchor)
-            anchor_norm = x0_hat_anchor.abs().norm()
-
-            # Optional curl / conservativity diagnostic on the anchor (debug only).
-            if (config.run_curl_diagnostic and config.save_intermediates
-                    and viz_state["seed_dir"] is not None):
-                compute_curl_diagnostic(
-                    x0_hat_anchor.detach(),
-                    text_embed_multi, text_embed_multi_pool,
-                    text_embed_concepts, text_embed_concepts_pool,
-                    text_embed_uncond, text_embed_uncond_pool,
-                    t, 0,
-                )
-
-            # ── inner Euclidean ascent loop: no re-noising, no new noise prediction ──
-            # With --netgrad_crn the reward's (tau, eps) draws are pinned to one seed for the
-            # whole inner loop, so every g^(k) is a gradient of the SAME fixed landscape (the
-            # ascent property the re-noising loop could not give). The global RNG state is
-            # saved/restored around the loop so downstream sampling noise is unaffected.
-            correction_seed = viz_state["seed"] + t
-            netgrad_rng_seed = int(correction_seed.item()) if config.netgrad_crn else None 
-            if config.netgrad_crn:
-                cpu_rng_state = torch.get_rng_state()
-                cuda_rng_state = torch.cuda.get_rng_state_all() if x_cur.is_cuda else None
-
-            u = x0_hat_anchor.detach().clone()
-            for cstep in range(num_latent_corrector_steps):
-                u = u.detach().requires_grad_(True)
-
-                R = calculate_reward_energy(
-                    u,
-                    text_embed_multi, text_embed_multi_pool,
-                    text_embed_concepts, text_embed_concepts_pool,
-                    emb_uncond=text_embed_uncond, pool_uncond=text_embed_uncond_pool,
-                    rng_seed=netgrad_rng_seed,
-                )
-                grad = torch.autograd.grad(R, u, retain_graph=False)[0] * beta
-                cgmin, cgmax = grad.min().item(), grad.max().item()
-                # Norm-match to the ANCHOR (not to u): fixes the scale of every inner step,
-                # so ‖Δ‖ ≤ γ·‖x̂₀⁽¹⁾‖ no matter how large M is.
-                grad = grad.detach() / (grad.abs().norm() + 1e-3) * anchor_norm
-                u = (u.detach() + (float(config.netgrad_gamma) / num_latent_corrector_steps) * grad).detach()
-
-                if config.save_intermediates and viz_state["seed_dir"] is not None and cstep in [0, num_latent_corrector_steps - 1]:
-                    t_val = int(t.item())
-                    tcorr = viz_state["correction_count"]
-                    inter_dir = os.path.join(viz_state["seed_dir"], "intermediates", f"tcorr{tcorr}")
-
-                    for _name, _tensor in [
-                        ("x0_hat_anchor", x0_hat_anchor.detach()),
-                        ("grad", grad),
-                        ("u", u),
-                    ]:
-                        if torch.isnan(_tensor).any() or torch.isinf(_tensor).any():
-                            print(f"[WARN] {_name} has NaN/Inf")
-                        out_path = os.path.join(inter_dir, f"tcorr{tcorr}_t{t_val}_k{cstep}_{_name}_raw.png")
-                        viz_latent_raw(_tensor, out_path, title=f"{_name} t={t_val} k={cstep}")
-                        out_path = os.path.join(inter_dir, f"tcorr{tcorr}_t{t_val}_k{cstep}_{_name}_decoded.png")
-                        decode_tensor = 4.0 * _tensor / (_tensor.abs().max() + 1e-8)
-                        decode_latent_for_viz(decode_tensor, out_path)
-
-                # With no re-noising every gradient lives on one landscape, so R should
-                # increase monotonically across the inner loop — the built-in sanity check.
-                print(
-                    f"[EuclNetGrad t={int(t.item())}, k={cstep+1}/{num_latent_corrector_steps}] "
-                    f"reward: {float(R.detach().item()):.4f} grad: {_fmt_stats((cgmin, cgmax))} "
-                    f"u: {_fmt_stats((u.min().item(), u.max().item()))}"
-                )
-
-            if config.netgrad_crn:
-                torch.set_rng_state(cpu_rng_state)
-                if cuda_rng_state is not None:
-                    torch.cuda.set_rng_state_all(cuda_rng_state)
-
-            # ── net gradient Δ and the single outer step along it ──
-            net_grad = (u - x0_hat_anchor).detach()
-            # Normalize the net gradient to have the same magnitude as the anchor
-            net_grad = net_grad / (net_grad.abs().max() + 1e-3) * x0_hat_anchor.abs().max()
-            x_tilde_0 = (x0_hat_anchor + float(eta) * net_grad).detach() #Todo: need to calibrate eta: snr dependent. 
-            # ε_eff: the whole correction folded back into a shifted noise prediction (logging).
-            correction_tensor = _x0_to_noise(x_cur.detach(), x_tilde_0, at)
-
-            # ── one DDIM step with the ORIGINAL ε (final-step branch of the helper) ──
-            x_cur = _update_x_cur_from_x_tilde(
-                x_cur.detach(), num_latent_corrector_steps - 1, num_latent_corrector_steps,
-                config.use_cfgpp, config.psi,
-                at, at_prev, x_tilde_0, noise_uncond, noise_multi,
-                forward_noise=eps_anchor,
-            ).detach()
-
-            if config.save_intermediates and viz_state["seed_dir"] is not None:
-                t_val = int(t.item())
-                tcorr = viz_state["correction_count"]
-                inter_dir = os.path.join(viz_state["seed_dir"], "intermediates", f"tcorr{tcorr}")
-
-                for _name, _tensor in [
-                    ("net_grad", net_grad),
-                    ("x_tilde_0", x_tilde_0),
-                    ("correction_tensor", correction_tensor),
-                ]:
-                    if torch.isnan(_tensor).any() or torch.isinf(_tensor).any():
-                        print(f"[WARN] {_name} has NaN/Inf")
-                    out_path = os.path.join(inter_dir, f"tcorr{tcorr}_t{t_val}_{_name}_raw.png")
-                    viz_latent_raw(_tensor, out_path, title=f"{_name} t={t_val}")
-                    out_path = os.path.join(inter_dir, f"tcorr{tcorr}_t{t_val}_{_name}_decoded.png")
-                    decode_tensor = 4.0 * _tensor / (_tensor.abs().max() + 1e-8)
-                    decode_latent_for_viz(decode_tensor, out_path)
-
-            stats = {
-                "mode": "eucl-netgrad",
-                "correction_tensor": (correction_tensor.min().item(), correction_tensor.max().item()),
-                "grad": (cgmin, cgmax),
-                "eta": float(eta),
-                "gamma": float(config.netgrad_gamma),
-                "x0_hat_interm": (x0_hat_anchor.min().item(), x0_hat_anchor.max().item()),
-                "net_grad": (net_grad.min().item(), net_grad.max().item()),
-                "x_tilde_0": (x_tilde_0.min().item(), x_tilde_0.max().item()),
-                "x_cur": (x_cur.min().item(), x_cur.max().item()),
-                "reward": float(R.detach().item()),
-            }
-            stats_str = " ".join(f"{k}: {_fmt_stats(v)}" for k, v in stats.items())
-            print(f"[EuclNetGrad t={int(t.item())}] {stats_str}")
-            # Bounded-correction check: ‖Δ‖ ≤ γ·‖x̂₀⁽¹⁾‖ regardless of M.
-            print(
-                f"[EuclNetGrad t={int(t.item())}] |net_grad|={net_grad.norm().item():.4f} "
-                f"gamma*|x0_hat_anchor|={float(config.netgrad_gamma) * anchor_norm.item():.4f}"
-            )
-
-        if not ckpt_was_enabled:
-            unet.disable_gradient_checkpointing()
-
-        return x_cur.to(dtype=x.dtype).detach(), stats
-
-    def update_x_with_dps_option2(x, t, num_latent_corrector_steps, eta, beta, correction_mode=None):
-        """`correction_mode` overrides config.correction_mode (per-phase hybrid modes)."""
-        correction_mode = correction_mode or config.correction_mode
-        """Option 2: per-concept Jacobians.
-
-        grad = (β+1) · J^T_{x_t}(x̂^C_0) · s(x̂^C_0, t=0, C)
-                      - β · Σ_i  J^T_{x_t}(x̂^{c_i}_0) · s(x̂^{c_i}_0, t=0, c_i)
-
-        Each x̂_0 is estimated with its own conditioning, so each Jacobian
-        captures how that specific x̂_0 moves with x_t.
-        """
-        text_embed_uncond = text_embeds[0:1]
-        text_embed_multi = text_embeds[1:2]
-        text_embed_uncond_pool = text_embeds_pool[0:1]
-        text_embed_multi_pool = text_embeds_pool[1:2]
-
-        base_slice = prompt_layout["base_concept_slice"]
-        concept_chunks = [text_embeds[base_slice]]
-        concept_pool_chunks = [text_embeds_pool[base_slice]]
-        text_embed_concepts = torch.cat([chunk for chunk in concept_chunks if chunk.shape[0] > 0], dim=0)
-        text_embed_concepts_pool = torch.cat(
-            [chunk for chunk in concept_pool_chunks if chunk.shape[0] > 0],
-            dim=0,
-        )
-
-        if text_embed_concepts.shape[0] == 0:
-            text_embed_concepts = text_embed_multi
-            text_embed_concepts_pool = text_embed_multi_pool
-
-        at, at_prev = _get_alphas(t)
-        dps_t_eps = t.new_tensor(config.dps_t_eps)
-        at_eps = scheduler.alphas_cumprod[dps_t_eps.cpu()]
-
-        x_cur = x.detach().to(dtype=torch.float32)
-        stats = {}
-        unet.requires_grad_(False)
-
-        with torch.autocast(device_type="cuda", enabled=False), torch.enable_grad():
-            for cstep in range(num_latent_corrector_steps):
-
-                # ── Jacobian for the full-concept x̂^C_0 ──────────────────────────
-                x_cur_C = x_cur.detach().requires_grad_(True)
-
-                noise_pred_base = _predict_noise(
-                    torch.cat([x_cur_C, x_cur_C]),
-                    t,
-                    torch.cat([text_embed_uncond, text_embed_multi], dim=0),
-                    torch.cat([text_embed_uncond_pool, text_embed_multi_pool], dim=0),
-                )
-                # save the original x_cur and noise_pred_base for later use
-                if cstep == 0:
-                    x_orig = x_cur.detach().clone()
-                    noise_pred_base_orig = noise_pred_base.detach().clone()
-                
-                noise_uncond = noise_pred_base[0:1]
-                noise_multi = noise_pred_base[1:2]
-                noise_multi_cfg = noise_uncond + config.guidance_scale * (noise_multi - noise_uncond)
-
-                if config.x0_hat_score_source == "multi-cfg": 
-                    x0_hat_C = (x_cur_C - (1 - at).sqrt() * noise_multi_cfg) / at.sqrt()
-                elif config.x0_hat_score_source == "multi": 
-                    x0_hat_C = (x_cur_C - (1 - at).sqrt() * noise_multi) / at.sqrt()
-                else:
-                    x0_hat_C = (x_cur_C - (1 - at).sqrt() * noise_uncond) / at.sqrt()
-                
-                z_noise = torch.randn_like(x0_hat_C).detach()
-                x_eps_latent_C = at_eps.sqrt() * x0_hat_C + (1 - at_eps).sqrt() * z_noise
-                    
-                with torch.no_grad():  
-                    score_C = _noise2score(
-                        _predict_noise(x_eps_latent_C.detach(), dps_t_eps, text_embed_multi, text_embed_multi_pool),
-                        at_eps,
-                    ) #! very large value at 
-
-                grad_C = torch.autograd.grad(
-                    outputs=x0_hat_C,
-                    inputs=x_cur_C,
-                    grad_outputs=score_C,
-                    retain_graph=False,
-                    create_graph=False,
-                    allow_unused=False,
-                )[0]
-
-                # ── Per-concept Jacobians  Σ_i J^T(x̂^{c_i}_0) · s_{c_i} ──────────
-                K = text_embed_concepts.shape[0]
-                print(K)
-                grad_concepts_sum = torch.zeros_like(grad_C)
-
-                for cc in range(K):
-                    
-                    # 1. x_t --> x_0|t 
-                    
-                    x_cur_ci = x_cur.detach().requires_grad_(True)
-
-                    noise_pred_ci = _predict_noise(
-                        torch.cat([x_cur_ci, x_cur_ci]),
-                        t,
-                        torch.cat([text_embed_uncond, text_embed_concepts[cc : cc + 1]], dim=0),
-                        torch.cat([text_embed_uncond_pool, text_embed_concepts_pool[cc : cc + 1]], dim=0),
-                    )
-                    noise_uncond_ci, noise_ci = noise_pred_ci[0:1], noise_pred_ci[1:2]
-                    noise_ci_cfg = noise_uncond_ci + config.guidance_scale * (noise_ci - noise_uncond_ci)
-
-                    if config.x0_hat_score_source == "multi-cfg":
-                        x0_hat_ci = (x_cur_ci - (1 - at).sqrt() * noise_ci_cfg) / at.sqrt()
-                    else:
-                        x0_hat_ci = (x_cur_ci - (1 - at).sqrt() * noise_ci) / at.sqrt()
-                    
-                    # 2. x_0|t --> score(x̂^{c_i}_0|\eps, t=\eps, c_i) 
-
-                    x_eps_latent_ci = at_eps.sqrt() * x0_hat_ci + (1 - at_eps).sqrt() * z_noise
-                    with torch.no_grad():
-                        score_ci = _noise2score(
-                            _predict_noise(
-                                x_eps_latent_ci.detach(), dps_t_eps,
-                                text_embed_concepts[cc : cc + 1],
-                                text_embed_concepts_pool[cc : cc + 1],
-                            ),
-                            at_eps,
-                        )
-
-                    grad_ci = torch.autograd.grad(
-                        outputs=x0_hat_ci,
-                        inputs=x_cur_ci,
-                        grad_outputs=score_ci,
-                        retain_graph=False,
-                        create_graph=False,
-                        allow_unused=False,
-                    )[0]
-                    grad_concepts_sum = grad_concepts_sum + grad_ci
-
-                # grad = (β)·J^T_C·s_C − β·Σ J^T_{c_i}·s_{c_i}
-                grad = (beta) * grad_C - (beta / K) * grad_concepts_sum
-                if config.x0_hat_score_source == "multi-cfg":
-                    grad = grad / config.guidance_scale 
-
-                if correction_mode == "reverse-sde":
-
-                    cgmin, cgmax = grad.min().item(), grad.max().item()
-                    # grad_noise = _score2noise(grad, at)
-                    # print("Grad noise: min={:.4f} max={:.4f} norm={:.4f}".format(grad_noise.min().item(), grad_noise.max().item(), grad_noise.norm().item()))
-                    # grad = grad.clamp(-5, 5) #! This may need tuning, values are large
-                    # grad = grad / (torch.abs(grad).max() + 1e-3) * 5.0  #! try
-
-                    ## 1. Get intermediate x'_{t-1} = x_interm
-                    ## Only one denoising step to next_t
-                    # if cstep == 0:
-                    #     if config.x0_interm_noise_type == "multi-cfg":
-                    #         x_interm = scheduler.step(noise_multi_cfg.detach(), t, x_cur.detach(), return_dict=False)[0]
-                    #     elif config.x0_interm_noise_type == "multi":
-                    #         x_interm = scheduler.step(noise_multi.detach(), t, x_cur.detach(), return_dict=False)[0]
-                    #     else:
-                    #         x_interm = scheduler.step(noise_uncond.detach(), t, x_cur.detach(), return_dict=False)[0]
-                    # else:
-                    x_interm = x_cur.detach() # stay at the same timestep
-                    
-                    # debug
-                    correction_tensor = (1 - config.kappa) * noise_multi_cfg.detach() + config.kappa * _score2noise(grad, at).detach()
-                    correction_tensor = correction_tensor / (correction_tensor.norm() + 1e-3) * noise_multi.detach().norm()
-                    noise_interm = _get_interm_noise(cstep, num_latent_corrector_steps, noise_uncond, noise_multi, noise_multi_cfg)
-                    x0_hat_interm = _compute_x0_from_xt(x_cur.detach(), at, noise_interm)
-                    x_tilde_0 = (1 - eta/num_latent_corrector_steps) * x0_hat_interm + (eta/num_latent_corrector_steps) * grad.detach()
-
-                    ## 2. Update x_cur
-                    # x_cur = scheduler.step(correction_tensor, t, x_cur.detach(), return_dict=False)[0].detach()
-                    grad = grad.detach() / (grad.norm() + 1e-4) * x0_hat_interm.norm() #! force normalize to avoid magnitude issues
-                    x_cur = (x_interm + (float(eta)/num_latent_corrector_steps)  * grad).detach()
-                
-                    # final outer update at the end of the loop
-                    if cstep == num_latent_corrector_steps - 1:
-                        net_grad = (x_cur - x_orig).detach()
-                        noise_uncond_orig = noise_pred_base_orig[0:1]
-                        noise_multi_orig = noise_pred_base_orig[1:2]
-                        noise_cfg_orig = noise_uncond_orig + config.guidance_scale * (noise_multi_orig - noise_uncond_orig)
-                        if config.x0_interm_noise_type == "multi-cfg":
-                            x_interm = scheduler.step(noise_cfg_orig.detach(), t, x_orig.detach(), return_dict=False)[0]
-                        elif config.x0_interm_noise_type == "multi":
-                            x_interm = scheduler.step(noise_multi_orig.detach(), t, x_orig.detach(), return_dict=False)[0]
-                        else:
-                            x_interm = scheduler.step(noise_uncond_orig.detach(), t, x_orig.detach(), return_dict=False)[0]
-                        x_cur = x_interm + float(eta) * net_grad
-                    
-                    if config.save_intermediates and viz_state["seed_dir"] is not None and cstep in [0, num_latent_corrector_steps - 1]:
-                        t_val = int(t.item())
-                        tcorr = viz_state["correction_count"]
-                        inter_dir = os.path.join(viz_state["seed_dir"], "intermediates", f"tcorr{tcorr}")
-                        
-                        for _name, _tensor in [
-                            ("x0_hat_C", x0_hat_C),
-                            ("grad_C", grad_C),
-                            ("grad", grad),
-                            ("correction_tensor", correction_tensor),
-                            ("x0_hat_interm", x0_hat_interm),
-                            ("x_cur", x_cur),
-                            ("x_tilde_0", x_tilde_0),
-                        ]:
-                            out_path = os.path.join(inter_dir, f"tcorr{tcorr}_t{t_val}_k{cstep}_{_name}.png")
-                            # if "grad" in _name:
-                            out_path = os.path.join(inter_dir, f"tcorr{tcorr}_t{t_val}_k{cstep}_{_name}_raw.png")
-                            viz_latent_raw(_tensor, out_path, title=f"{_name} t={t_val} k={cstep}")
-                            # else:
-                            out_path = os.path.join(inter_dir, f"tcorr{tcorr}_t{t_val}_k{cstep}_{_name}_decoded.png")
-                            _tensor = 4.0 * _tensor / (_tensor.abs().max() + 1e-8)
-                            decode_latent_for_viz(_tensor, out_path)
-                    
-                
-                elif correction_mode == "correct-tweedie":
-                    #! [Warning] final update step is no implemented yet. 
-                    # debug
-                    cgmin, cgmax = grad.min().item(), grad.max().item()
-                    grad = grad.clamp(-5, 5) #! This may need tuning, values are large
-                    # x0_hat_interm = ( x_cur - (1 - at).sqrt() * noise_multi_cfg.detach()) / at.sqrt()
-                    noise_interm = _get_interm_noise(cstep, num_latent_corrector_steps, noise_uncond, noise_multi, noise_multi_cfg)
-                    x0_hat_interm = _compute_x0_from_xt(x_cur.detach(), at, noise_interm)
-                    ## Force normalize?
-                    # grad = grad / (grad.norm() + 1e-4) * x0_hat_interm.norm()
-                    snr = (1 - at).sqrt() / (at.sqrt()) #Todo: use snr to modulate eta so that it decreases over time
-                    x_tilde_0 = (1 - eta) * x0_hat_interm + eta * grad.detach()
-                    
-                    # x_cur_denoised = ( x_cur - (1 - at).sqrt() * correction_tensor) / at.sqrt()
-                    # Force normalize to avoid magnitude issues
-                    x_tilde_0 = x_tilde_0 / (x_tilde_0.norm() + 1e-4) * x0_hat_interm.norm()
-                    # debug
-                    correction_tensor = _x0_to_noise(x_cur, x_tilde_0, at)
-                    if config.save_intermediates and viz_state["seed_dir"] is not None and cstep in [0, num_latent_corrector_steps - 1]:
-                        t_val = int(t.item())
-                        tcorr = viz_state["correction_count"]
-                        inter_dir = os.path.join(viz_state["seed_dir"], "intermediates", f"tcorr{tcorr}")
-                        
-                        for _name, _tensor in [
-                            ("x0_hat_C", x0_hat_C.detach()),
-                            ("grad_C", grad_C),
-                            ("grad_concepts_sum", grad_concepts_sum / K),
-                            ("grad", grad),
-                            ("correction_tensor", correction_tensor),
-                            ("x0_hat_interm", x0_hat_interm),
-                            ("x_tilde_0", x_tilde_0),
-                        ]:
-                            if torch.isnan(_tensor).any() or torch.isinf(_tensor).any():
-                                print(f"[WARN] {_name} has NaN/Inf")
-                            _tensor = 4.0 * _tensor / (_tensor.abs().max() + 1e-8)
-                            decode_latent_for_viz(_tensor, os.path.join(inter_dir, f"tcorr{tcorr}_t{t_val}_k{cstep}_{_name}.png"))
-                    
-                    # update to new x_cur
-                    x_cur = _update_x_cur_from_x_tilde(
-                        x_cur, cstep, num_latent_corrector_steps, config.use_cfgpp, config.psi,
-                        at, at_prev, x_tilde_0, noise_uncond, noise_multi,
-                        forward_noise=noise_multi_cfg, #! noise_multi 
-                    )
-                else:
-                    # x_intermediate = scheduler.step(noise_multi_cfg.detach(), t, x_cur.detach(), return_dict=False)[0]
-                    # correction_tensor = grad
-                    # x_cur = (x_intermediate + float(eta) * grad).detach()
-                    raise ValueError(f"Unknown correction_mode: {correction_mode}")
-
-                stats = {
-                    "mode": correction_mode,
-                    "correction_tensor": (correction_tensor.min().item(), correction_tensor.max().item()),
-                    "grad": (cgmin, cgmax),
-                    "eta": float(eta),
-                    "x0_hat_interm": (x0_hat_interm.min().item(), x0_hat_interm.max().item()),
-                    "x_tilde_0": (x_tilde_0.min().item(), x_tilde_0.max().item()),
-                    "x_cur": (x_cur.min().item(), x_cur.max().item()),
-                }
-                stats_str = " ".join(f"{k}: {_fmt_stats(v)}" for k, v in stats.items())
-                print(f"[Correction t={int(t.item())}, k={cstep+1}/{num_latent_corrector_steps}] {stats_str}")
-        
-        return x_cur.to(dtype=x.dtype).detach(), stats
-
-    def update_x_with_mpgd(x, t, *, correction_mode=None):
-        """`correction_mode` overrides config.correction_mode (per-phase hybrid modes)."""
-        correction_mode = correction_mode or config.correction_mode
-        """MPGD update: no Jacobian — gradient applied directly in x̂_0 space.
-        """
-        text_embed_uncond = text_embeds[0:1]
-        text_embed_multi = text_embeds[1:2]
-        text_embed_uncond_pool = text_embeds_pool[0:1]
-        text_embed_multi_pool = text_embeds_pool[1:2]
-
-        base_slice = prompt_layout["base_concept_slice"]
-        concept_chunks = [text_embeds[base_slice]]
-        concept_pool_chunks = [text_embeds_pool[base_slice]]
-        text_embed_concepts = torch.cat([chunk for chunk in concept_chunks if chunk.shape[0] > 0], dim=0)
-        text_embed_concepts_pool = torch.cat(
-            [chunk for chunk in concept_pool_chunks if chunk.shape[0] > 0],
-            dim=0,
-        )
-
-        if text_embed_concepts.shape[0] == 0:
-            text_embed_concepts = text_embed_multi
-            text_embed_concepts_pool = text_embed_multi_pool
-
-        at = scheduler.alphas_cumprod[t.cpu()]
-        dps_t_eps = t.new_tensor(config.dps_t_eps)
-        at_eps = scheduler.alphas_cumprod[dps_t_eps.cpu()]
-
-        x_cur = x.detach().to(dtype=torch.float32)
-        stats = {}
-        unet.requires_grad_(False)
-
-        with torch.no_grad():
-            for _ in range(config.num_latent_corrector_steps):
-
-                # ── Step 1: compute x̂'_0 from x_t ──────────────────────────────
-                noise_pred_base = _predict_noise(
-                    torch.cat([x_cur, x_cur]),
-                    t,
-                    torch.cat([text_embed_uncond, text_embed_multi], dim=0),
-                    torch.cat([text_embed_uncond_pool, text_embed_multi_pool], dim=0),
-                )
-                noise_uncond = noise_pred_base[0:1]
-                noise_multi = noise_pred_base[1:2]
-                noise_multi_cfg = noise_uncond + config.guidance_scale * (noise_multi - noise_uncond)
-
-                if config.x0_hat_score_source == "multi-cfg":
-                    x0_hat = (x_cur - (1 - at).sqrt() * noise_multi_cfg) / at.sqrt()
-                elif config.x0_hat_score_source == "multi":
-                    x0_hat = (x_cur - (1 - at).sqrt() * noise_multi) / at.sqrt()
-                else:
-                    x0_hat = (x_cur - (1 - at).sqrt() * noise_uncond) / at.sqrt()
-
-                # ── Step 2: compute composed score at x0_hat ────────
-                noise_pred_x0 = _predict_noise( torch.cat([x0_hat, x0_hat]), 
-                    dps_t_eps,
-                    torch.cat([text_embed_uncond, text_embed_multi], dim=0),
-                    torch.cat([text_embed_uncond_pool, text_embed_multi_pool], dim=0),
-                )
-                noise_uncond_x0 = noise_pred_x0[0:1]
-                noise_C_x0 = noise_pred_x0[1:2]
-                if config.ddim_forward_type in ["cfg", "uncond"]:
-                    noise_C_x0 = noise_uncond_x0 + config.guidance_scale * (noise_C_x0 - noise_uncond_x0) 
-                
-                score_C_x0 = _noise2score(
-                    noise_C_x0,
-                    at_eps,
-                )
-
-                K = text_embed_concepts.shape[0]
-                # print(K)
-                score_concepts_sum = torch.zeros_like(score_C_x0)
-                for cc in range(K):
-                    noise_ci_x0 = _predict_noise(
-                            x0_hat,
-                            dps_t_eps,
-                            text_embed_concepts[cc : cc + 1],
-                            text_embed_concepts_pool[cc : cc + 1],
-                        )
-                    if config.ddim_forward_type in ["cfg", "uncond"]:
-                        noise_ci_x0 = noise_uncond_x0 + config.guidance_scale * (noise_ci_x0 - noise_uncond_x0)
-                    score_ci_x0 = _noise2score(noise_ci_x0, at_eps)
-                    
-                    score_concepts_sum = score_concepts_sum + score_ci_x0
-
-                
-                composed_score = score_C_x0 - (1.0 / K) * score_concepts_sum
-                #Todo: projection of composed_score onto multi manifold
-                x_tilde_0 = x0_hat + config.beta * composed_score
-                # debug
-                stats = {"x0_hat": (x0_hat.min().item(), x0_hat.max().item()), 
-                         "x_tilde_0": (x_tilde_0.min().item(), x_tilde_0.max().item())
-                         }
-                
-                # Force normalize
-                x_tilde_0 = x_tilde_0 / x_tilde_0.norm() * x0_hat.norm()
-
-
-                # ── Step 3: manual DDIM step using noise predicted at x_cur  ─────────
-                t_scalar = int(t.item())
-                ts_list = scheduler.timesteps.tolist()
-                cur_idx = next((i for i, v in enumerate(ts_list) if int(v) == t_scalar), -1)
-                if cur_idx == -1 or cur_idx == len(ts_list) - 1:
-                    at_prev = scheduler.final_alpha_cumprod.to(dtype=torch.float32)
-                else:
-                    at_prev = scheduler.alphas_cumprod[int(ts_list[cur_idx + 1])].to(dtype=torch.float32)
-                    
-                if config.ddim_forward_type == "cfg":
-                    assert config.x0_hat_score_source == "multi-cfg", "ddim_forward_type=cfg requires x0_hat_score_source=multi-cfg"
-                    x_cur = (at_prev.sqrt() * x_tilde_0 + (1 - at_prev).sqrt() * noise_multi_cfg).detach()  
-                elif config.ddim_forward_type == "uncond":
-                    assert (config.guidance_scale < 1.01 and config.x0_hat_score_source == "multi-cfg"), "uncond forward type requires guidance_scale <= 1.0 and x0_hat_score_source=multi-cfg"
-                    x_cur = (at_prev.sqrt() * x_tilde_0 + (1 - at_prev).sqrt() * noise_uncond).detach()
-                else:
-                    assert config.x0_hat_score_source == "multi", "multi ddim_forward_type requires x0_hat_score_source = multi"
-                    x_cur = (at_prev.sqrt() * x_tilde_0 + (1 - at_prev).sqrt() * noise_multi).detach()
-
-                if config.save_intermediates and viz_state["seed_dir"] is not None:
-                    t_val = int(t.item())
-                    tcorr = viz_state["correction_count"]
-                    inter_dir = os.path.join(viz_state["seed_dir"], "intermediates", f"tcorr{tcorr}")
-                    composed_score = score_C_x0 - (1.0 / K) * score_concepts_sum
-                    for _name, _tensor in [
-                        ("x0_hat", x0_hat),
-                        ("score_C_x0", score_C_x0),
-                        ("score_concepts_sum", score_concepts_sum),
-                        ("composed_score", composed_score),
-                        ("x_tilde_0", x_tilde_0),
-                        ("x_cur", x_cur),
-                    ]:
-                        decode_latent_for_viz(_tensor, os.path.join(inter_dir, f"tcorr{tcorr}_t{t_val}_mpgd_{_name}.png"))
-
-                stats.update({
-                    "mode": "mpgd",
-                    "composed_grad": (composed_score.min().item(), composed_score.max().item()),
-                    "eta": float(config.eta),
-                })
-
-        return x_cur.to(dtype=x.dtype).detach(), stats
 
     def denoise_step(x, t, step, correction_step_set, algo_version="option1", correction_mode=None):
         """`algo_version` / `correction_mode` come from the caller, not from config.
@@ -2571,15 +1831,7 @@ def main():
                 # boosted_grad_ts = None
                 num_latent_corrector_steps = config.num_latent_corrector_steps
             
-            if algo_version == "option2":
-                # eta_t = max(config.eta / (step + 1), 0.05) 
-                eta_t =  config.eta * (1 - config.eta_schedule_factor * step / config.n_timesteps) *  at_prev.sqrt() #! try this snr based adaptive eta. Need to maintain grad.max() <= x_0t.max()
-                x, dps_stats = update_x_with_dps_option2(x, t, num_latent_corrector_steps, eta=eta_t, beta=config.beta, correction_mode=correction_mode)
-
-            elif algo_version == "mpgd":
-                x, dps_stats = update_x_with_mpgd(x, t, num_latent_corrector_steps)
-
-            elif algo_version == "energy":
+            if algo_version == "energy":
                 if correction_mode == "correct-tweedie":
                     eta_t = config.eta * (1 - config.eta_schedule_factor * step / config.n_timesteps) * 1.0
                 else:
@@ -2592,39 +1844,19 @@ def main():
                 else:
                     eta_t = config.eta * (1 - config.eta_schedule_factor * step / config.n_timesteps) * 1.0 #at_prev.sqrt()
                 x, dps_stats = update_x_with_energy_grad_opt2(x, t, num_latent_corrector_steps, eta=eta_t, beta=config.beta, boosted_grad_ts=boosted_grad_ts, correction_mode=correction_mode)
-
-            elif algo_version == "energy-netgrad":
-                eta_t = config.eta * (1 - config.eta_schedule_factor * step / config.n_timesteps)
-                x, dps_stats = update_x_with_energy_eucl_netgrad(
-                    x, t, num_latent_corrector_steps, eta=eta_t, beta=config.beta,
-                    correction_mode=correction_mode,
-                )
+                
 
             elif algo_version == "energy-hybrid-1-2":
-                eta_factor = 1.0 #if config.correction_mode == "correct-tweedie" else at_prev.sqrt() #! the factor is moved inside the algo funcitons. 
+                eta_factor = 1.0 
                 if step < config.num_steps_first_algo:
                     eta_t = config.eta_opt1 * (1 - config.eta_schedule_factor * step / config.n_timesteps) * eta_factor
                     x, dps_stats = update_x_with_energy_grad(x, t, num_latent_corrector_steps, eta=eta_t, beta=config.beta_opt1, boosted_grad_ts=boosted_grad_ts, correction_mode=algo1_correction_mode)
                 else:
                     eta_t = config.eta_opt2 * (1 - config.eta_schedule_factor * step / config.n_timesteps) * eta_factor
                     x, dps_stats = update_x_with_energy_grad_opt2(x, t, num_latent_corrector_steps, eta=eta_t, beta=config.beta_opt2, boosted_grad_ts=boosted_grad_ts, correction_mode=algo2_correction_mode)
-
-            elif algo_version == "hybrid-1-2":
-                if step < config.num_steps_first_algo:
-                    x, dps_stats = update_x_with_dps(
-                        x, t, num_latent_corrector_steps,
-                        eta=config.eta_opt1, beta=config.beta_opt1,
-                        correction_mode=algo1_correction_mode,
-                    )
-                else:
-                    x, dps_stats = update_x_with_dps_option2(
-                        x, t, num_latent_corrector_steps,
-                        eta=config.eta_opt2, beta=config.beta_opt2,
-                        correction_mode=algo2_correction_mode,
-                    )
             else:
-                eta_t =  config.eta * (1 - config.eta_schedule_factor * step / config.n_timesteps) * at_prev.sqrt()
-                x, dps_stats = update_x_with_dps(x, t, num_latent_corrector_steps, eta=eta_t, beta=config.beta, correction_mode=correction_mode)
+                raise ValueError(f"Unknown algo_version: {algo_version}")
+
             print("Aft Corr: x stats: min={:.2f} max={:.2f} norm={:.2f}".format(x.min().item(), x.max().item(), x.norm().item()))
 
             t_val = int(t.item())
