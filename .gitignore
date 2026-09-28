@@ -1,0 +1,9 @@
+.DS_Store
+.venv/
+__pycache__/
+*.py[cod]
+outputs/
+.cache/
+*.egg-info/
+build/
+dist/

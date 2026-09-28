@@ -130,32 +130,20 @@ Equivalent explicit command:
 python examples/demo_sdxl.py \
   --prompt "a hairy shark and two spotted clams" \
   --seed "[1688]" \
-  --guidance_scale 5.0 \
+  --guidance_scale 0.8 \
   --n_timesteps 50 \
   --algo_version energy \
   --correction_mode correct-tweedie \
   --num_ts_to_correct "[5]" \
   --num_latent_corrector_steps 1 \
-  --init_latent_corrector_steps 10 \
-  --output_dir outputs/sdxl
+  --init_latent_corrector_steps 5 \
+  --output_dir outputs/sdxl \
+  --use_cfgpp \
+  --x0_hat_score_source "multi"
 ```
 
 The PNG and a YAML record of the resolved configuration are stored below `outputs/sdxl/`.
 
-### Manual concept decomposition
-
-The demo uses spaCy noun chunks by default. For unusual syntax, attributes, or repeated nouns, provide a `+`-separated decomposition:
-
-```bash
-python examples/demo_sdxl.py \
-  --prompt "a red cube beside a blue sphere" \
-  --concept "a red cube+a blue sphere" \
-  --seed "[0]" \
-  --algo_version energy \
-  --num_ts_to_correct "[5]"
-```
-
-Do not append the full prompt to `--concept`; the demo adds it internally.
 
 ### Matched baseline
 
@@ -192,23 +180,12 @@ python examples/demo_audioldm2.py \
   --num_ts_to_correct "[5]" \
   --num_latent_corrector_steps 1 \
   --init_latent_corrector_steps 10 \
-  --output_dir outputs/audioldm2
+  --output_dir outputs/audioldm2 \
+  --x0_hat_score_source "multi"
 ```
 
 The waveform is stored as a WAV file below `outputs/audioldm2/`. Add `--save_mel_png` for a mel-spectrogram preview.
 
-### Manual event decomposition
-
-The automatic parser separates common temporal connectors such as “followed by,” “while,” and “then.” Override it when necessary:
-
-```bash
-python examples/demo_audioldm2.py \
-  --prompt "a dog barking while rain falls" \
-  --concept "a dog barking+rain falls" \
-  --seed "[0]" \
-  --algo_version energy \
-  --num_ts_to_correct "[5]"
-```
 
 ### Matched baseline
 
@@ -229,14 +206,14 @@ python examples/demo_audioldm2.py \
 | `--concept` | Optional `+`-separated decomposition | inferred if omitted |
 | `--seed` | Python-style list of integer seeds | `"[1688]"` |
 | `--n_timesteps` | DDIM denoising steps | `50` |
-| `--guidance_scale` | Classifier-free guidance strength | `5.0` SDXL, `3.5` audio |
+| `--guidance_scale` | Classifier-free guidance strength | `5.0` SDXL, `0.8` CFG++, `3.5` audio |
 | `--num_ts_to_correct` | Number or list of early steps to correct | `"[5]"` |
 | `--num_latent_corrector_steps` | Inner corrections after initialization | `1` |
-| `--init_latent_corrector_steps` | Inner corrections at initial corrected steps | `10` |
+| `--init_latent_corrector_steps` | Inner corrections at initial corrected steps | `5` |
 | `--algo_version` | Reward/corrector variant | `energy` |
 | `--correction_mode` | Latent update rule | `correct-tweedie` |
-| `--eta` | Correction strength | `0.8` |
-| `--energy_num_samples` | Monte Carlo energy samples | `2` |
+| `--eta` | Correction strength | `0.2` |
+| `--energy_num_samples` | Monte Carlo energy samples | `4` |
 | `--output_dir` | Root output directory | `outputs/...` |
 
 Start by varying only the prompt, decomposition, seed, and output directory. Included values are demonstration defaults, not universal optimal settings.
@@ -247,7 +224,6 @@ Start by varying only the prompt, decomposition, seed, and output directory. Inc
 - Resolved configurations are saved beside outputs.
 - AudioLDM2 enables deterministic CUDA algorithms and fails explicitly if the installed stack cannot provide them.
 - Compare corrected and uncorrected samples with identical seeds and sampling settings.
-- Hardware and dependency versions can affect floating-point results. Record `pip freeze`, GPU model, and driver version for archival runs.
 
 ## Figures and qualitative examples
 
@@ -260,14 +236,6 @@ Selected TILT outputs from the [project page](https://mlresearchreview-anon.gith
 | <img src="https://raw.githubusercontent.com/mlresearchreview-anon/TILT-project-anonymous/main/assets/qualitative/compbench_bus_ours.jpg" width="280" alt="TILT generation: bus and bicycle"> | <img src="https://raw.githubusercontent.com/mlresearchreview-anon/TILT-project-anonymous/main/assets/qualitative/compbench_table_ours.jpg" width="280" alt="TILT generation: compositional scene"> |
 | GenEval: multiple objects | GenEval: train composition |
 | <img src="https://raw.githubusercontent.com/mlresearchreview-anon/TILT-project-anonymous/main/assets/qualitative/geneval_sink_ours.jpg" width="280" alt="TILT generation: multiple objects"> | <img src="https://raw.githubusercontent.com/mlresearchreview-anon/TILT-project-anonymous/main/assets/qualitative/geneval_train_ours.jpg" width="280" alt="TILT generation: train composition"> |
-
-### Concept dominance analysis
-
-<p align="center">
-  <img src="assets/concept_dominance_sdxl.png" width="62%" alt="Density of Concept 1 and Concept 2 DINO scores for SDXL, with the equal-score diagonal shown in red.">
-</p>
-
-The DINO-score density visualizes concept imbalance in SDXL. The dashed diagonal marks equal scores for both concepts.
 
 ## Troubleshooting
 
@@ -291,23 +259,6 @@ Confirm that the model license has been accepted and that `huggingface-cli whoam
 
 The AudioLDM2 demo deliberately requests deterministic CUDA kernels. Begin with the documented PyTorch/CUDA versions; changing the stack may select an unsupported kernel.
 
-## Scope of this release
-
-Included:
-
-- single-prompt SDXL inference;
-- single-prompt AudioLDM2 inference;
-- automatic and manual concept/event decomposition;
-- corrected and matched-baseline generation; and
-- optional intermediate diagnostics.
-
-Not included:
-
-- benchmark prompt files;
-- dataset download or preprocessing;
-- large-scale generation launchers;
-- quantitative evaluation scripts; or
-- unpublished qualitative results.
 
 ## License and third-party software
 
