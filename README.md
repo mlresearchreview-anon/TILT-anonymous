@@ -1,4 +1,4 @@
-# TILT
+# `TILT`: Model-Intrinsic Reward Alignment for Compositional Diffusion
 
 Official anonymous implementation accompanying the paper **TILT**. This repository provides compact, single-prompt demonstrations of compositional guidance for:
 
