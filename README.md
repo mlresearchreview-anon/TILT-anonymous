@@ -251,15 +251,15 @@ Start by varying only the prompt, decomposition, seed, and output directory. Inc
 
 ## Figures and qualitative examples
 
-The repository includes publication-ready previews and their source PDFs:
+### Recent TILT generations
 
-### Qualitative comparison
+Selected TILT outputs from the [project page](https://mlresearchreview-anon.github.io/TILT-project-anonymous/). See the project page for full prompt-level comparisons with other methods.
 
-<p align="center">
-  <img src="assets/qualitative_results.png" width="96%" alt="Qualitative comparison grid for compositional image generation.">
-</p>
-
-[Open the vector PDF](assets/qualitative_results.pdf)
+| CompBench: bus and bicycle | CompBench: compositional scene |
+|:---:|:---:|
+| <img src="https://raw.githubusercontent.com/mlresearchreview-anon/TILT-project-anonymous/main/assets/qualitative/compbench_bus_ours.jpg" width="280" alt="TILT generation: bus and bicycle"> | <img src="https://raw.githubusercontent.com/mlresearchreview-anon/TILT-project-anonymous/main/assets/qualitative/compbench_table_ours.jpg" width="280" alt="TILT generation: compositional scene"> |
+| GenEval: multiple objects | GenEval: train composition |
+| <img src="https://raw.githubusercontent.com/mlresearchreview-anon/TILT-project-anonymous/main/assets/qualitative/geneval_sink_ours.jpg" width="280" alt="TILT generation: multiple objects"> | <img src="https://raw.githubusercontent.com/mlresearchreview-anon/TILT-project-anonymous/main/assets/qualitative/geneval_train_ours.jpg" width="280" alt="TILT generation: train composition"> |
 
 ### Concept dominance analysis
 
