@@ -11,8 +11,6 @@ from .gaussian_smoothing import GaussianSmoothing
 from matplotlib import pyplot as plt
 import os
 
-# from diffusers.models.cross_attention import CrossAttention
-# from diffusers.models.attention import CrossAttention #todo: This line works?
 
 
 def text_under_image(image: np.ndarray, text: str, text_color: Tuple[int, int, int] = (0, 0, 0)) -> np.ndarray:
