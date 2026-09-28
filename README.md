@@ -229,13 +229,13 @@ Start by varying only the prompt, decomposition, seed, and output directory. Inc
 
 ### Recent TILT generations
 
-Selected TILT outputs from the [project page](https://mlresearchreview-anon.github.io/TILT-project-anonymous/). See the project page for full prompt-level comparisons with other methods.
+Selected TILT outputs from the [project page](https://mlresearchreview-anon.github.io/tilt-project/). See the project page for full prompt-level comparisons with other methods.
 
 | CompBench: bus and bicycle | CompBench: compositional scene |
 |:---:|:---:|
-| <img src="https://raw.githubusercontent.com/mlresearchreview-anon/TILT-project-anonymous/main/assets/qualitative/compbench_bus_ours.jpg" width="280" alt="TILT generation: bus and bicycle"> | <img src="https://raw.githubusercontent.com/mlresearchreview-anon/TILT-project-anonymous/main/assets/qualitative/compbench_table_ours.jpg" width="280" alt="TILT generation: compositional scene"> |
+| <img src="https://raw.githubusercontent.com/mlresearchreview-anon/tilt-project/main/assets/qualitative/compbench_bus_ours.jpg" width="280" alt="TILT generation: bus and bicycle"> | <img src="https://raw.githubusercontent.com/mlresearchreview-anon/tilt-project/main/assets/qualitative/compbench_table_ours.jpg" width="280" alt="TILT generation: compositional scene"> |
 | GenEval: multiple objects | GenEval: train composition |
-| <img src="https://raw.githubusercontent.com/mlresearchreview-anon/TILT-project-anonymous/main/assets/qualitative/geneval_sink_ours.jpg" width="280" alt="TILT generation: multiple objects"> | <img src="https://raw.githubusercontent.com/mlresearchreview-anon/TILT-project-anonymous/main/assets/qualitative/geneval_train_ours.jpg" width="280" alt="TILT generation: train composition"> |
+| <img src="https://raw.githubusercontent.com/mlresearchreview-anon/tilt-project/main/assets/qualitative/geneval_sink_ours.jpg" width="280" alt="TILT generation: multiple objects"> | <img src="https://raw.githubusercontent.com/mlresearchreview-anon/tilt-project/main/assets/qualitative/geneval_train_ours.jpg" width="280" alt="TILT generation: train composition"> |
 
 ## Troubleshooting
 
