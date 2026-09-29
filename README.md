@@ -227,15 +227,16 @@ Start by varying only the prompt, decomposition, seed, and output directory. Inc
 
 ## Figures and qualitative examples
 
-### Recent TILT generations
+### Image generation examples
 
-Selected TILT outputs from the [project page](https://mlresearchreview-anon.github.io/tilt-project/). See the project page for full prompt-level comparisons with other methods.
+Selected TILT outputs from the [project page](https://mlresearchreview-anon.github.io/tilt-project/). Prompts below match the qualitative comparison figures. See the project page for comparisons with other methods.
 
-| CompBench: bus and bicycle | CompBench: compositional scene |
+| Example | Example |
 |:---:|:---:|
-| <img src="https://raw.githubusercontent.com/mlresearchreview-anon/tilt-project/main/assets/qualitative/compbench_bus_ours.jpg" width="280" alt="TILT generation: bus and bicycle"> | <img src="https://raw.githubusercontent.com/mlresearchreview-anon/tilt-project/main/assets/qualitative/compbench_table_ours.jpg" width="280" alt="TILT generation: compositional scene"> |
-| GenEval: multiple objects | GenEval: train composition |
-| <img src="https://raw.githubusercontent.com/mlresearchreview-anon/tilt-project/main/assets/qualitative/geneval_sink_ours.jpg" width="280" alt="TILT generation: multiple objects"> | <img src="https://raw.githubusercontent.com/mlresearchreview-anon/tilt-project/main/assets/qualitative/geneval_train_ours.jpg" width="280" alt="TILT generation: train composition"> |
+| **a green school bus and a red bag**<br><img src="https://raw.githubusercontent.com/mlresearchreview-anon/tilt-project/main/assets/qualitative/compbench_bus_ours.jpg" width="280" alt="TILT generation: a green school bus and a red bag"> | **The soft yellow duckling swam next to the sleek black swan.**<br><img src="https://raw.githubusercontent.com/mlresearchreview-anon/tilt-project/main/assets/qualitative/compbench_duck_ours.jpg" width="280" alt="TILT generation: The soft yellow duckling swam next to the sleek black swan."> |
+| **a metallic jewelry and a wooden spoon**<br><img src="https://raw.githubusercontent.com/mlresearchreview-anon/tilt-project/main/assets/qualitative/compbench_spoon_ours.jpg" width="280" alt="TILT generation: a metallic jewelry and a wooden spoon"> | **an oval coffee table and a square end table**<br><img src="https://raw.githubusercontent.com/mlresearchreview-anon/tilt-project/main/assets/qualitative/compbench_table_ours.jpg" width="280" alt="TILT generation: an oval coffee table and a square end table"> |
+| **a photo of a pizza right of a banana**<br><img src="https://raw.githubusercontent.com/mlresearchreview-anon/tilt-project/main/assets/qualitative/geneval_pizza_ours.jpg" width="280" alt="TILT generation: a photo of a pizza right of a banana"> | **a photo of a person and a sink**<br><img src="https://raw.githubusercontent.com/mlresearchreview-anon/tilt-project/main/assets/qualitative/geneval_sink_ours.jpg" width="280" alt="TILT generation: a photo of a person and a sink"> |
+| **a photo of a surfboard and a suitcase**<br><img src="https://raw.githubusercontent.com/mlresearchreview-anon/tilt-project/main/assets/qualitative/geneval_surf_ours.jpg" width="280" alt="TILT generation: a photo of a surfboard and a suitcase"> | **a photo of a red train and a purple bear**<br><img src="https://raw.githubusercontent.com/mlresearchreview-anon/tilt-project/main/assets/qualitative/geneval_train_ours.jpg" width="280" alt="TILT generation: a photo of a red train and a purple bear"> |
 
 ## Troubleshooting
 
